@@ -310,7 +310,7 @@ void get_gip(char * GIP)
 }
 
 
-int main() //int main(int argc, char *argv[])
+int main(int argc, char * argv[]) //int main(int argc, char *argv[])
 {
     //pcap_t *arp_r;
     //u_char arp_request_packet[50] = {0, };
@@ -325,14 +325,14 @@ int main() //int main(int argc, char *argv[])
     arp_spoof_packet = (u_char *)calloc(50, sizeof(u_char));
 
 
-    char DIP[7];
+    char DIP[20] = {0, };
     struct ether_addr *dmac;
     dmac = (ether_addr*)malloc(sizeof(ether_addr));
 
-    char SMAC[7];
-    char SIP[5];
+    char SMAC[30] = {0,};
+    char SIP[20] = {0,};
     //gateway ip
-    char GIP[5];
+    char GIP[20] = {0,};
 
 
    //printf("started\n\n");
@@ -362,10 +362,15 @@ int main() //int main(int argc, char *argv[])
    //gip get
    get_gip(GIP);
 
-   printf("enter DIP\n");
-   scanf("%s", DIP);
+   //printf("enter DIP\n");
+   //scanf("%s", DIP);
    //fflush(stdin);
 
+   //DIP = argv[1];
+   //printf("DIP : %s", argv[1]);
+   //DIP = argv[1];
+   memcpy(DIP, argv[1], 16*sizeof(char));
+   printf("DIP : %s\n", DIP);
    //arp request packet
    arp_request_setting(arp_request_packet, DIP, SMAC, SIP);
 
