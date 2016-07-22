@@ -1,6 +1,6 @@
-network_hw2_: main.cpp
-	g++ -o network_hw2_ main.cpp -L./ -lpcap
+send_arp: main.cpp
+	g++ -o send_arp main.cpp -L./ -lpcap
 
 clean:
-	rm -f *.o network_hw2_
+	rm -f *.o send_arp
 
